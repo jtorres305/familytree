@@ -1,41 +1,79 @@
-import React from 'react';
-import ReactFlow, { Controls } from 'react-flow-renderer';
+import React, { useCallback } from 'react';
+import Dagre from '@dagrejs/dagre';
+import { ReactFlowProvider, ReactFlow, Panel, useNodesState, useEdgesState, useReactFlow } from '@xyflow/react';
 
-const initialNodes = [
-    { id: '1', data: { label: 'Marteen Norwood' }, position: { x: 250, y: 0 } },
-    { id: '2', data: { label: 'Rudolph Levarity' }, position: { x: 25, y: 100 } },
-    { id: '3', data: { label: 'Keity Levarity' }, position: { x: 325, y: 100 } },
-    { id: '4', data: { label: 'Kelvin Levarity' }, position: { x: 175, y: 100 } },
-    { id: '5', data: { label: 'LaTrese Torres' }, position: { x: 475, y: 100 } },
-    { id: '6', data: { label: 'Kristy Conley' }, position: { x: 25, y: 200 } },
-    { id: '7', data: { label: 'Zanetta Levarity' }, position: { x: 175, y: 200 } },
-    { id: '8', data: { label: 'Jarret Torres' }, position: { x: 475, y: 200 } },
-    { id: '9', data: { label: 'Caitlin Torres' }, position: { x: 625, y: 200 } },
-    { id: '10', data: { label: 'Giselle Conley' }, position: { x: -125, y: 300 } },
-    { id: '11', data: { label: 'Nyla Conley' }, position: { x: 25, y: 300 } },
-];
+import { initialNodes, initialEdges } from './nodes-edges.js';
+import '@xyflow/react/dist/style.css';
 
-const initialEdges = [
-    { id: 'e1-2', source: '1', target: '2' },
-    { id: 'e1-3', source: '1', target: '3' },
-    { id: 'e1-4', source: '1', target: '4' },
-    { id: 'e1-5', source: '1', target: '5' },
-    { id: 'e2-6', source: '2', target: '6' },
-    { id: 'e4-7', source: '4', target: '7' },
-    { id: 'e5-8', source: '5', target: '8' },
-    { id: 'e5-9', source: '5', target: '9' },
-    { id: 'e6-10', source: '6', target: '10' },
-    { id: 'e6-11', source: '6', target: '11' },
-];
-
-function App() {
-    return (
-        <div style={{ height: '100vh' }}>
-            <ReactFlow nodes={initialNodes} edges={initialEdges} fitView>
-                <Controls />
-            </ReactFlow>
-        </div>
+const getLayoutedElements = (nodes, edges, options) => {
+    const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: options.direction });
+   
+    edges.forEach((edge) => g.setEdge(edge.source, edge.target));
+    nodes.forEach((node) =>
+      g.setNode(node.id, {
+        ...node,
+        width: node.measured?.width ?? 0,
+        height: node.measured?.height ?? 0,
+      }),
     );
-}
-
-export default App;
+   
+    Dagre.layout(g);
+   
+    return {
+      nodes: nodes.map((node) => {
+        const position = g.node(node.id);
+        // We are shifting the dagre node position (anchor=center center) to the top left
+        // so it matches the React Flow node anchor point (top left).
+        const x = position.x - (node.measured?.width ?? 0) / 2;
+        const y = position.y - (node.measured?.height ?? 0) / 2;
+   
+        return { ...node, position: { x, y } };
+      }),
+      edges,
+    };
+  };
+   
+  const LayoutFlow = () => {
+    const { fitView } = useReactFlow();
+    const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+    const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+   
+    const onLayout = useCallback(
+      (direction) => {
+        console.log(nodes);
+        const layouted = getLayoutedElements(nodes, edges, { direction });
+   
+        setNodes([...layouted.nodes]);
+        setEdges([...layouted.edges]);
+   
+        window.requestAnimationFrame(() => {
+          fitView();
+        });
+      },
+      [nodes, edges],
+    );
+   
+    return (
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        fitView
+      >
+        <Panel position="top-right">
+          <button onClick={() => onLayout('TB')}>vertical layout</button>
+          <button onClick={() => onLayout('LR')}>horizontal layout</button>
+        </Panel>
+      </ReactFlow>
+    );
+  };
+   
+  export default function () {
+    return (
+      <ReactFlowProvider>
+        <LayoutFlow />
+      </ReactFlowProvider>
+    );
+  }
